@@ -118,9 +118,86 @@ Cada fila en `fact_resultado_carrera` representa el resultado de un piloto espec
 
 ---
 
-## ⚙️ Cómo Ejecutar el Proyecto
+## ☁️ Infraestructura AWS — Aurora PostgreSQL
 
-> _Se completará conforme avancen los criterios._
+### Configuración del cluster
+
+| Parámetro | Valor |
+|---|---|
+| **Motor** | Aurora PostgreSQL 15.x |
+| **Tipo de instancia** | `db.t3.medium` (desarrollo) |
+| **Región** | `us-east-1` |
+| **Puerto** | `5432` |
+| **Schema DW** | `f1_dw` (separado del esquema `public`) |
+| **Base de datos** | `f1_analytics` |
+
+> El esquema `f1_dw` mantiene el Data Warehouse aislado del esquema `public` (OLTP), siguiendo buenas prácticas de separación de ambientes.
+
+### Variables de entorno
+
+Crea un archivo `.env` en la raíz del repositorio con las siguientes variables. **Nunca subas este archivo a GitHub** (ya está en `.gitignore`).
+
+```bash
+# .env — credenciales Aurora PostgreSQL
+DB_HOST=<aurora-cluster-endpoint>.rds.amazonaws.com
+DB_PORT=5432
+DB_NAME=f1_analytics
+DB_USER=<usuario>
+DB_PASSWORD=<password>
+DB_SCHEMA=f1_dw
+```
+
+### Pasos de configuración
+
+**1. Crear el cluster Aurora en AWS Console**
+
+```
+RDS → Create database → Aurora (PostgreSQL) → db.t3.medium
+Habilitar: Public access = Yes (solo para desarrollo desde Colab)
+VPC Security Group: permitir inbound TCP 5432 desde tu IP
+```
+
+**2. Conectarse y crear la base de datos**
+
+```bash
+psql -h <aurora-endpoint> -U <usuario> -d postgres
+```
+
+```sql
+CREATE DATABASE f1_analytics;
+```
+
+**3. Cargar el esquema dimensional**
+
+```bash
+psql -h <aurora-endpoint> -U <usuario> -d f1_analytics -f scripts/01_schema_ddl.sql
+```
+
+**4. Verificar que el esquema se creó correctamente**
+
+```sql
+SET search_path TO f1_dw;
+
+SELECT table_name, obj_description(
+    (quote_ident(table_schema)||'.'||quote_ident(table_name))::regclass, 'pg_class'
+) AS descripcion
+FROM information_schema.tables
+WHERE table_schema = 'f1_dw'
+ORDER BY table_name;
+```
+
+Deberías ver las 6 tablas: `dim_circuito`, `dim_constructor`, `dim_estado`, `dim_piloto`, `dim_tiempo`, `fact_resultado_carrera`.
+
+### Buenas prácticas aplicadas
+
+- Schema `f1_dw` separado del esquema `public` para aislar el DW
+- Naming consistente: prefijos `dim_` y `fact_`, sufijos `_sk` (surrogate key), `_id` (natural key)
+- `COMMENT ON TABLE/COLUMN` en cada objeto para documentación interna
+- Índices en todas las FKs de la fact table y en columnas de filtro frecuente (`temporada`, `era_f1`, `es_abandono`)
+- Índice parcial en `es_abandono = TRUE` para optimizar consultas de análisis de retiros
+- Credenciales externalizadas en `.env`, nunca hardcodeadas en el código
+
+## ⚙️ Cómo Ejecutar el Proyecto
 
 ### Pre-requisitos
 
@@ -132,13 +209,13 @@ pip install pandas sqlalchemy psycopg2-binary python-dotenv
 
 ```bash
 cp .env.example .env
-# Editar .env con las credenciales de Aurora PostgreSQL
+# Editar .env con el endpoint de Aurora y credenciales
 ```
 
-### 2. Crear el esquema dimensional en AWS Aurora
+### 2. Cargar el esquema dimensional en Aurora
 
 ```bash
-psql -h <host> -U <user> -d <db> -f scripts/01_schema_ddl.sql
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f scripts/01_schema_ddl.sql
 ```
 
 ### 3. Ejecutar el pipeline ETL
