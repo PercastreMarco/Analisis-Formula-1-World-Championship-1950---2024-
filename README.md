@@ -62,9 +62,59 @@ proyecto-final/
 
 ## 🗂️ Modelo Dimensional
 
-> _Se completará en el Criterio 2._
+### Esquema estrella
 
-El diagrama del esquema estrella se encuentra en [`docs/diagrama_modelo.png`](docs/diagrama_modelo.png).
+![Diagrama del modelo dimensional](docs/diagrama_modelo.png)
+
+### Grano declarado
+
+> **Un registro por piloto por carrera.**
+
+Cada fila en `fact_resultado_carrera` representa el resultado de un piloto específico en una carrera específica. Esto permite analizar tanto el rendimiento individual como agregaciones por equipo, circuito y temporada sin pérdida de granularidad.
+
+### Tabla de hechos — `fact_resultado_carrera`
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `piloto_sk` | INT FK | Surrogate key → dim_piloto |
+| `constructor_sk` | INT FK | Surrogate key → dim_constructor |
+| `circuito_sk` | INT FK | Surrogate key → dim_circuito |
+| `tiempo_sk` | INT FK | Surrogate key → dim_tiempo |
+| `estado_sk` | INT FK | Surrogate key → dim_estado |
+| `posicion_salida` | INT | Grid position de salida |
+| `posicion_final` | INT | Posición oficial de llegada (NULL si abandono) |
+| `puntos` | NUMERIC | Puntos otorgados según el sistema de la era |
+| `vueltas_completadas` | INT | Vueltas completadas en carrera |
+| `num_pitstops` | INT | Conteo de paradas (calculado en ETL) |
+| `tiempo_total_ms` | BIGINT | Tiempo total de carrera en milisegundos |
+| `delta_posicion` | INT | `posicion_salida - posicion_final` (positivo = ganó posiciones) |
+| `es_abandono` | BOOLEAN | Flag derivado del `status_id` |
+
+**Clave primaria:** `(piloto_sk, tiempo_sk)` — garantiza unicidad al nivel del grano.
+
+### Dimensiones
+
+| Dimensión | Filas aprox. | SCD | Atributos clave |
+|---|---|---|---|
+| `dim_piloto` | 857 | Tipo 1 | nombre_completo, nacionalidad, fecha_nacimiento, codigo_piloto |
+| `dim_constructor` | 211 | Tipo 1 | nombre, nacionalidad, referencia, era_f1 |
+| `dim_circuito` | 77 | Tipo 1 | nombre, pais, localidad, latitud, longitud |
+| `dim_tiempo` | ~1,100 | Tipo 1 | fecha, anio, temporada, numero_ronda, era_f1 |
+| `dim_estado` | ~140 | Tipo 1 | categoria, descripcion |
+
+### Decisiones de diseño
+
+**`dim_piloto`** — Se desnormalizaron `nombre` y `apellido` en un solo campo `nombre_completo` para simplificar consultas. Se conserva `driver_id` como natural key para joins con fuentes externas. `fecha_nacimiento` incluida para análisis age-performance.
+
+**`dim_constructor`** — Se agregó el atributo calculado `era_f1` (ej. "Era turbo 1977–88", "Era híbrida 2014+") para facilitar análisis de dominancia por período sin requerir CTEs complejos en cada consulta.
+
+**`dim_circuito`** — Colapsa `circuits.csv` y metadata de `races.csv` en una sola dimensión. Incluye coordenadas geográficas (`latitud`, `longitud`) para habilitar mapas en el dashboard. El campo `pais` desnormalizado permite filtros rápidos sin JOIN adicional.
+
+**`dim_tiempo`** — Grano de fecha de carrera (no calendario estándar diario), porque F1 tiene un calendario irregular. Incluye `numero_ronda` para análisis de momentum dentro de temporada y `era_f1` para filtros de largo plazo.
+
+**`dim_estado`** — Mapea los 140+ códigos de `status` del dataset a 4 categorías analíticas: `Finalizado`, `Abandono mecánico`, `Accidente`, `Descalificado`. Esta desnormalización permite responder "¿qué % de abandonos son mecánicos vs. accidentes?" sin lógica compleja en SQL.
+
+**Surrogate keys** — Todas las dimensiones usan surrogate keys (`_sk`) generadas con `ROW_NUMBER()` en el ETL, desacopladas de los IDs originales de Ergast. Las natural keys (`_id NK`) se conservan para auditoría.
 
 ---
 
