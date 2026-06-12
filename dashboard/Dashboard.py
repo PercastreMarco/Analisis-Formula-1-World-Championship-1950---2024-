@@ -61,16 +61,22 @@ def hex_to_rgba(hex_color: str, alpha: float = 0.15) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-# PLOTLY_LAYOUT — solo colores, fuentes y márgenes. SIN xaxis/yaxis.
+# PLOTLY_BASE — colores, fuentes y márgenes.
+# SIN legend/xaxis/yaxis para evitar colisiones en update_layout(**PLOTLY_BASE, ...).
+# Aplicar legend con fig.update_layout(legend=LEGEND_STYLE) por separado.
 PLOTLY_BASE = dict(
     paper_bgcolor=F1_CARD,
     plot_bgcolor=F1_CARD,
     font=dict(family="Barlow, sans-serif", color="#C0C0C0", size=12),
     title_font=dict(family="Barlow Condensed, sans-serif", size=15, color=F1_TEXT),
-    legend=dict(bgcolor=F1_CARD2, bordercolor=F1_BORDER, borderwidth=1,
-                font=dict(size=11, color="#C0C0C0")),
     margin=dict(l=40, r=20, t=50, b=40),
     hovermode="x unified",
+)
+
+# Estilo de leyenda reutilizable — aplicar con update_layout(legend=LEGEND_STYLE)
+LEGEND_STYLE = dict(
+    bgcolor=F1_CARD2, bordercolor=F1_BORDER, borderwidth=1,
+    font=dict(size=11, color="#C0C0C0")
 )
 
 AXIS_STYLE = dict(gridcolor=F1_BORDER, linecolor="#333",
@@ -455,7 +461,7 @@ else:
             color_discrete_sequence=px.colors.qualitative.Bold,
         )
         fig1.update_traces(line_width=2.5, marker_size=6)
-        fig1.update_layout(**PLOTLY_BASE)
+        fig1.update_layout(**PLOTLY_BASE, legend=LEGEND_STYLE)
         fig1.update_xaxes(title="Ronda", **AXIS_STYLE)
         fig1.update_yaxes(title="Puntos acumulados", **AXIS_STYLE)
         st.plotly_chart(fig1, use_container_width=True)
@@ -590,7 +596,7 @@ with col5:
         title="Victorias por constructor — Top 3 de cada era",
         color_discrete_sequence=px.colors.qualitative.Bold,
     )
-    fig4.update_layout(**PLOTLY_BASE)
+    fig4.update_layout(**PLOTLY_BASE, legend=LEGEND_STYLE)
     fig4.update_xaxes(title="Era", tickangle=-15, **AXIS_STYLE)
     fig4.update_yaxes(title="Victorias", **AXIS_STYLE)
     st.plotly_chart(fig4, use_container_width=True)
@@ -604,7 +610,7 @@ with col6:
         title="Fiabilidad mecánica vs Tasa de finalización",
         color_discrete_map=ERA_COLORS,
     )
-    fig5.update_layout(**PLOTLY_BASE)
+    fig5.update_layout(**PLOTLY_BASE, legend=LEGEND_STYLE)
     fig5.update_xaxes(title="% Abandono mecánico", ticksuffix="%", **AXIS_STYLE)
     fig5.update_yaxes(title="% Finaliza carrera", ticksuffix="%", **AXIS_STYLE)
     st.plotly_chart(fig5, use_container_width=True)
@@ -685,8 +691,11 @@ with col8:
         title=titulo,
         height=max(350, top_n_circ * 26),
     )
-    fig6.update_layout(legend=dict(orientation="h", y=1.04, x=0)),
-    )
+    fig6.update_layout(legend=dict(
+        orientation="h", y=1.04, x=0,
+        bgcolor=F1_CARD2, bordercolor=F1_BORDER, borderwidth=1,
+        font=dict(size=11, color="#C0C0C0")
+    ))
     fig6.update_xaxes(title="Posición de salida del ganador", **AXIS_STYLE)
     fig6.update_yaxes(title="", **AXIS_STYLE)
     st.plotly_chart(fig6, use_container_width=True)
@@ -745,6 +754,7 @@ fig7.update_layout(
     **PLOTLY_BASE,
     title="Edad promedio de los ganadores de carrera por temporada",
     height=400,
+    legend=LEGEND_STYLE,
 )
 # FIX: update_xaxes/update_yaxes en lugar de xaxis_title/yaxis_title en update_layout
 fig7.update_xaxes(title="Temporada", **AXIS_STYLE)
